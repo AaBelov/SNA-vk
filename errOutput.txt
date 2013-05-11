@@ -1,0 +1,23 @@
+`}' expected but `b' found
+
+Think we should have better error message here? Help us by sending this query to cypher@neo4j.org.
+
+Thank you, the Neo4j Team.
+
+"start m=node(*) where m.uid?=257962create n={uid:'24048513', firstName:'Darinochka', lastName:'Al'bertovna', sex:'1', bDate:'6.12.1991', city:'2', canPost:'1', relation:'1', nickname:'', interests:'танцы, экономика, журналистика, психология, юриспруденция', movies:'Шаг вперёд, тайны следствия, ментовские войны', tv:'КВН, Камеди клаб, футбол, бокс', books:'', games:'Морской бой, балда))', about:'Морально неустойчива. Социально опасна.▒▓▓▓▒▓▓▓▒▓▒▒▓▒▓▒▒▓▒▒▓▒▓▒▓▒▒▒▓▒▓▓▒▒▒▓▒▒▒▓▒▓▒▓▒▒▒▓▓▒▓▒▒▓▒▒▒▒▓▒▓▒▓▓▓▒▓▒▒▓▒▓▒▒▓▒Огонь Стрельца не похож на пылкость Льва и Овна. Это огонь, тлеющий под золой, перегоревшие, но еще не потухшие угли внутренних страстей. Бесконечно меняющийся Стрелец может заявить о себе. Одни - множеством различных способов направляют свои цели вертикально на высокие духовные вершины, считая физический акт любви средством мистического абстрагирования, или же на общественные устремления. Они ищут партнера, стоящего в жизни намного выше их, которому они за это продают свою обычно идеальную страсть. Другие выбирают горизонтальную цель и нет конца из завоеваниям. Любовь, спорт, приключения, упоение, короче - Дон Жуан. Но до познания жизненного урока Стрельцов: Стрела и мишень в конечном счете одно целое, нацеленное в их собственное сердце.Стрелец ненавидит скандалы, как никто другой, всячески их избегает.Я никогда не говорила,что я-хорошая,милая и добрая --&#62; это вы сами себе напридумывали ...'}, n-[:FRIEND]-m"
+                                                                                                   ^
+	at org.neo4j.cypher.internal.parser.v1_8.CypherParserImpl.parse(CypherParserImpl.scala:47)
+	at org.neo4j.cypher.CypherParser.parse(CypherParser.scala:42)
+	at org.neo4j.cypher.ExecutionEngine$$anonfun$prepare$1.apply(ExecutionEngine.scala:67)
+	at org.neo4j.cypher.ExecutionEngine$$anonfun$prepare$1.apply(ExecutionEngine.scala:67)
+	at org.neo4j.cypher.internal.LRUCache.getOrElseUpdate(LRUCache.scala:37)
+	at org.neo4j.cypher.ExecutionEngine.prepare(ExecutionEngine.scala:67)
+	at org.neo4j.cypher.ExecutionEngine.execute(ExecutionEngine.scala:59)
+	at org.neo4j.cypher.ExecutionEngine.execute(ExecutionEngine.scala:54)
+	at org.neo4j.cypher.javacompat.ExecutionEngine.execute(ExecutionEngine.java:66)
+	at main.SNA.addToDB(SNA.java:106)
+	at main.SNA.readFriends(SNA.java:150)
+	at main.SNA.readFriends(SNA.java:164)
+	at main.SNA.readFriends(SNA.java:164)
+	at main.SNA.readFriends(SNA.java:164)
+	at main.SNA.main(SNA.java:179)
