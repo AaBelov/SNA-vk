@@ -14,6 +14,8 @@ import org.jdom2.Document;
 import org.jdom2.Element;
 import org.jdom2.JDOMException;
 import org.jdom2.input.SAXBuilder;
+import org.neo4j.cypher.javacompat.ExecutionEngine;
+import org.neo4j.cypher.javacompat.ExecutionResult;
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.neo4j.graphdb.index.Index;
@@ -23,9 +25,8 @@ import org.xml.sax.InputSource;
 public class SNA {
 
     public static final String BASE_URI = "https://api.vk.com/method/";
-    private static final int MAX_LEVEL = 2;
-    private static final String DB_PATH = "D:\\neo4j\\data\\graph.db"; //windows
-//    private static final String DB_PATH = "/home/oleg/neo4j_DB"; //linux
+    private static final int MAX_LEVEL = 3;
+    private static final String DB_PATH = "DB";
     private static final String FRIEND_LIST_KEY = "friend_list";
     private static final GraphDatabaseService graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(DB_PATH);
     private static Index<Node> nodeIndex;
@@ -144,18 +145,41 @@ public class SNA {
         return personData;
     }
 
+    public static void setRelationship(Node tempPerson, Node parentPerson) {
+        Iterable<Relationship> relationships = tempPerson.getRelationships(Direction.BOTH);
+        boolean relationAlreadyExist = false;
+        for (Relationship tempRel : relationships) {
+            if (tempRel.getOtherNode(tempPerson).getId() == parentPerson.getId()) {
+                relationAlreadyExist = true;
+                break;
+            }//ПЕРЕПИСАТЬ ВСЁ НАХЕР!!!
+        }
+        if (!relationAlreadyExist) {
+            Transaction tx = graphDb.beginTx();
+            try {
+                parentPerson.createRelationshipTo(tempPerson, RelTypes.FRIEND);
+                tx.success();
+            } finally {
+                tx.finish();
+            }
+        }
+    }
+
     public static Node addToDB(HashMap<String, Object> personProperties) {
         Node tempPerson = null;
+        Node existingNode = nodeIndex.get("uid", personProperties.get("uid")).getSingle();
         Transaction tx = graphDb.beginTx();
         try {
-            tempPerson = graphDb.createNode();
-            Iterator<String> keySetIterator = personProperties.keySet().iterator();
-            while (keySetIterator.hasNext()) {
-                String key = keySetIterator.next();
-                tempPerson.setProperty(key, personProperties.get(key));
+            if (existingNode == null) {
+                tempPerson = graphDb.createNode();
+                Iterator<String> keySetIterator = personProperties.keySet().iterator();
+                while (keySetIterator.hasNext()) {
+                    String key = keySetIterator.next();
+                    tempPerson.setProperty(key, personProperties.get(key));
+                }
+                nodeIndex.add(tempPerson, "uid", personProperties.get("uid"));
+                tx.success();
             }
-            nodeIndex.add(tempPerson, "uid", personProperties.get("uid"));
-            tx.success();
         } finally {
             tx.finish();
         }
@@ -167,7 +191,10 @@ public class SNA {
         Node parentPerson = nodeIndex.get("uid", parentUid).getSingle();
         Transaction tx = graphDb.beginTx();
         try {
-            tempPerson.createRelationshipTo(parentPerson, RelTypes.FRIEND);
+            if (tempPerson == null) {
+                tempPerson = nodeIndex.get("uid", personProperties.get("uid")).getSingle();
+            }
+            setRelationship(tempPerson, parentPerson);
             tx.success();
         } finally {
             tx.finish();
@@ -189,11 +216,17 @@ public class SNA {
         if (lvl == MAX_LEVEL) {
             return;
         }
-        System.out.println("Parsing tempUid = " + tempUid + " parentUid = " + parentUid + " lvl = " + lvl);
-        HashMap<String, Object> personData = parsePersonXML(getPersonXMLData(tempUid));
+        System.out.println("Parsing uid = " + tempUid + " parentUid = " + parentUid);
         String[] friendsUids = getPersonFriends(tempUid);
-        personData.put(FRIEND_LIST_KEY, friendsUids);
-        addToDB(personData, parentUid);
+        Node existingNode = nodeIndex.get("uid", tempUid).getSingle();
+        if (existingNode == null) {
+            HashMap<String, Object> personData = parsePersonXML(getPersonXMLData(tempUid));
+            System.out.println(" first_name = " + personData.get("first_name") + " last_name = " + personData.get("last_name") + " lvl = " + lvl);
+            personData.put(FRIEND_LIST_KEY, friendsUids);
+            existingNode = addToDB(personData, parentUid);
+        } else {
+            setRelationship(existingNode, nodeIndex.get("uid", parentUid).getSingle());
+        }
         for (String tempFriend : friendsUids) {
             recDownloadData(tempFriend, tempUid, lvl + 1);
         }
@@ -221,7 +254,7 @@ public class SNA {
                 if (tempFriend == null) {
                     continue;
                 }
-                Iterable<Relationship> relationships = tempFriend.getRelationships(Direction.OUTGOING);
+                Iterable<Relationship> relationships = tempFriend.getRelationships(Direction.BOTH);
                 boolean relationAlreadyExist = false;
                 for (Relationship tempRel : relationships) {
                     if (tempRel.getEndNode().getId() == tempNode.getId()) {
@@ -239,8 +272,10 @@ public class SNA {
     public static void main(String[] args) {
         registerShutdownHook(graphDb);
         nodeIndex = graphDb.index().forNodes("uids");
-//        dowloadData("55827129");
-        setAllRelations();
-
+        dowloadData("86030925");
+        //ExecutionEngine engine = new ExecutionEngine(graphDb);
+        //ExecutionResult result = engine.execute("start n=node(*), m = node(*) where id(n) <> 0 and id(m) <> 0 and n.uid = m.uid return n.id, m.id");
+        //System.out.println(result.toString());
+        //setAllRelations();
     }
 }
