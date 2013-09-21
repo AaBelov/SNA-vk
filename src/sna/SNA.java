@@ -7,6 +7,7 @@ import java.io.StringReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -14,8 +15,12 @@ import org.jdom2.Document;
 import org.jdom2.Element;
 import org.jdom2.JDOMException;
 import org.jdom2.input.SAXBuilder;
-import org.neo4j.cypher.javacompat.ExecutionEngine;
-import org.neo4j.cypher.javacompat.ExecutionResult;
+import org.neo4j.graphalgo.impl.centrality.BetweennessCentrality;
+import org.neo4j.graphalgo.impl.centrality.ClosenessCentrality;
+import org.neo4j.graphalgo.impl.centrality.EigenvectorCentralityPower;
+import org.neo4j.graphalgo.impl.centrality.ParallellCentralityCalculation;
+import org.neo4j.graphalgo.impl.shortestpath.*;
+import org.neo4j.graphalgo.impl.util.DoubleAdder;
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.neo4j.graphdb.index.Index;
@@ -152,7 +157,7 @@ public class SNA {
             if (tempRel.getOtherNode(tempPerson).getId() == parentPerson.getId()) {
                 relationAlreadyExist = true;
                 break;
-            }//ПЕРЕПИСАТЬ ВСЁ НАХЕР!!!
+            }
         }
         if (!relationAlreadyExist) {
             Transaction tx = graphDb.beginTx();
@@ -232,50 +237,37 @@ public class SNA {
         }
     }
 
-    public static void setAllRelations() {
-        Transaction tx = graphDb.beginTx();
-        try {
-            GlobalGraphOperations glOper = GlobalGraphOperations.at(graphDb);
-            Iterator<Node> allNodes = glOper.getAllNodes().iterator();
-            while (allNodes.hasNext()) {
-                setOneNodeRelations(allNodes.next());
-            }
-            tx.success();
-        } finally {
-            tx.finish();
-        }
-    }
-
-    public static void setOneNodeRelations(Node tempNode) {
-        if (tempNode.hasProperty(FRIEND_LIST_KEY)) {
-            String[] friendsUidList = (String[]) tempNode.getProperty(FRIEND_LIST_KEY);
-            for (String tempFriendUid : friendsUidList) {
-                Node tempFriend = nodeIndex.get("uid", tempFriendUid).getSingle();
-                if (tempFriend == null) {
-                    continue;
-                }
-                Iterable<Relationship> relationships = tempFriend.getRelationships(Direction.BOTH);
-                boolean relationAlreadyExist = false;
-                for (Relationship tempRel : relationships) {
-                    if (tempRel.getEndNode().getId() == tempNode.getId()) {
-                        relationAlreadyExist = true;
-                        break;
-                    }
-                }
-                if (!relationAlreadyExist) {
-                    tempNode.createRelationshipTo(tempFriend, RelTypes.FRIEND);
-                }
-            }
-        }
-    }
-
     public static void main(String[] args) {
         registerShutdownHook(graphDb);
         nodeIndex = graphDb.index().forNodes("uids");
-        dowloadData("86030925");
+        //dowloadData("86030925");
+        
         //ExecutionEngine engine = new ExecutionEngine(graphDb);
         //ExecutionResult result = engine.execute("start n=node(*), m = node(*) where id(n) <> 0 and id(m) <> 0 and n.uid = m.uid return n.id, m.id");
         //System.out.println(result.toString());
-        //setAllRelations();
+        
+        SingleSourceShortestPathBFS BFS;
+        BFS = new SingleSourceShortestPathBFS(null, Direction.BOTH, RelTypes.FRIEND);
+        HashSet<Node> nodes = new HashSet<Node>();
+        GlobalGraphOperations glOper = GlobalGraphOperations.at(graphDb);
+            Iterator<Node> allNodes = glOper.getAllNodes().iterator();
+            while (allNodes.hasNext()) {
+                nodes.add(allNodes.next());
+            }
+        BetweennessCentrality betweenness;
+        betweenness = new BetweennessCentrality(BFS , nodes);
+        
+        ClosenessCentrality closeness;
+        closeness = new ClosenessCentrality(BFS, new DoubleAdder(), args, nodes, null);
+        
+        EigenvectorCentralityPower eigenvector;
+        eigenvector = new EigenvectorCentralityPower(Direction.BOTH, null, nodes, null, 0.01);
+        ParallellCentralityCalculation shortestParhCalculations = new ParallellCentralityCalculation(BFS, nodes);
+        shortestParhCalculations.addCalculation(betweenness);
+        shortestParhCalculations.addCalculation(closeness);
+        
+        shortestParhCalculations.calculate();
+        eigenvector.calculate();
+        
     }
 }
