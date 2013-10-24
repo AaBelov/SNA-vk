@@ -239,7 +239,7 @@ public class SNA {
     }
 
     public static void downloadGroupMembers(String gid){
-        String response = requestGET("https://api.vk.com/method/groups.getMembers?gid=29899098");
+        String response = requestGET("https://api.vk.com/method/groups.getMembers?gid=" + gid);
         int start = response.indexOf('[');
         int end = response.indexOf(']');
         String uidsStr = response.substring(start + 1, end);
