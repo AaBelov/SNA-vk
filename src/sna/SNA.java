@@ -21,6 +21,7 @@ import org.neo4j.graphalgo.impl.centrality.EigenvectorCentralityPower;
 import org.neo4j.graphalgo.impl.centrality.ParallellCentralityCalculation;
 import org.neo4j.graphalgo.impl.shortestpath.*;
 import org.neo4j.graphalgo.impl.util.DoubleAdder;
+import org.neo4j.graphalgo.impl.util.IntegerAdder;
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.neo4j.graphdb.index.Index;
@@ -30,8 +31,8 @@ import org.xml.sax.InputSource;
 public class SNA {
 
     public static final String BASE_URI = "https://api.vk.com/method/";
-    private static final int MAX_LEVEL = 3;
-    private static final String DB_PATH = "DB";
+    private static final int MAX_LEVEL = 1;
+    private static final String DB_PATH = "GroupDB";
     private static final String FRIEND_LIST_KEY = "friend_list";
     private static final GraphDatabaseService graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(DB_PATH);
     private static Index<Node> nodeIndex;
@@ -207,7 +208,7 @@ public class SNA {
         return tempPerson;
     }
 
-    public static void dowloadData(String beginUid) {
+    public static void downloadData(String beginUid) {
         HashMap<String, Object> personData = parsePersonXML(getPersonXMLData(beginUid));
         String[] friendUids = getPersonFriends(beginUid);
         personData.put(FRIEND_LIST_KEY, friendUids);
@@ -237,37 +238,91 @@ public class SNA {
         }
     }
 
-    public static void main(String[] args) {
-        registerShutdownHook(graphDb);
-        nodeIndex = graphDb.index().forNodes("uids");
-        //dowloadData("86030925");
-        
-        //ExecutionEngine engine = new ExecutionEngine(graphDb);
-        //ExecutionResult result = engine.execute("start n=node(*), m = node(*) where id(n) <> 0 and id(m) <> 0 and n.uid = m.uid return n.id, m.id");
-        //System.out.println(result.toString());
-        
+    public static void downloadGroupMembers(String gid){
+        String response = requestGET("https://api.vk.com/method/groups.getMembers?gid=29899098");
+        int start = response.indexOf('[');
+        int end = response.indexOf(']');
+        String uidsStr = response.substring(start + 1, end);
+        String[] ids =  uidsStr.split(",");
+        for(String id : ids){
+            downloadData(id);
+        }
+    }
+    
+    public static void calculateMetrics() {
         SingleSourceShortestPathBFS BFS;
         BFS = new SingleSourceShortestPathBFS(null, Direction.BOTH, RelTypes.FRIEND);
         HashSet<Node> nodes = new HashSet<Node>();
         GlobalGraphOperations glOper = GlobalGraphOperations.at(graphDb);
-            Iterator<Node> allNodes = glOper.getAllNodes().iterator();
-            while (allNodes.hasNext()) {
-                nodes.add(allNodes.next());
-            }
+        Iterator<Node> allNodes = glOper.getAllNodes().iterator();
+        while (allNodes.hasNext()) {
+            nodes.add(allNodes.next());
+        }
         BetweennessCentrality betweenness;
-        betweenness = new BetweennessCentrality(BFS , nodes);
-        
-        ClosenessCentrality closeness;
-        closeness = new ClosenessCentrality(BFS, new DoubleAdder(), args, nodes, null);
-        
+        betweenness = new BetweennessCentrality(BFS, nodes);
+        betweenness.calculate();
+
         EigenvectorCentralityPower eigenvector;
         eigenvector = new EigenvectorCentralityPower(Direction.BOTH, null, nodes, null, 0.01);
-        ParallellCentralityCalculation shortestParhCalculations = new ParallellCentralityCalculation(BFS, nodes);
-        shortestParhCalculations.addCalculation(betweenness);
-        shortestParhCalculations.addCalculation(closeness);
-        
-        shortestParhCalculations.calculate();
         eigenvector.calculate();
         
+        ClosenessCentrality closeness;
+        closeness = new ClosenessCentrality(BFS, null, null, nodes, null);
+        closeness.calculate();
+        
+        /*ParallellCentralityCalculation shortestPathCalculations = new ParallellCentralityCalculation(BFS, nodes);
+        shortestPathCalculations.addCalculation(betweenness);
+        shortestPathCalculations.addCalculation(closeness);
+        shortestPathCalculations.calculate();*/
+    }
+
+    public static void setAllRelations() {
+        Transaction tx = graphDb.beginTx();
+        try {
+            GlobalGraphOperations glOper = GlobalGraphOperations.at(graphDb);
+            Iterator<Node> allNodes = glOper.getAllNodes().iterator();
+            while (allNodes.hasNext()) {
+                setOneNodeRelations(allNodes.next());
+            }
+            tx.success();
+        } finally {
+            tx.finish();
+        }
+    }
+
+    public static void setOneNodeRelations(Node tempNode) {
+        if (tempNode.hasProperty(FRIEND_LIST_KEY)) {
+            String[] friendsUidList = (String[]) tempNode.getProperty(FRIEND_LIST_KEY);
+            for (String tempFriendUid : friendsUidList) {
+                Node tempFriend = nodeIndex.get("uid", tempFriendUid).getSingle();
+                if (tempFriend == null) {
+                    continue;
+                }
+                Iterable<Relationship> relationships = tempFriend.getRelationships(Direction.BOTH);
+                boolean relationAlreadyExist = false;
+                for (Relationship tempRel : relationships) {
+                    if (tempRel.getEndNode().getId() == tempNode.getId()) {
+                        relationAlreadyExist = true;
+                        break;
+                    }
+                }
+                if (!relationAlreadyExist) {
+                    tempNode.createRelationshipTo(tempFriend, RelTypes.FRIEND);
+                }
+            }
+        }
+    }
+    
+    public static void main(String[] args) {
+        registerShutdownHook(graphDb);
+        nodeIndex = graphDb.index().forNodes("uids");
+        //dowloadData("86030925");
+        downloadGroupMembers("29899098");
+        setAllRelations();
+        //ExecutionEngine engine = new ExecutionEngine(graphDb);
+        //ExecutionResult result = engine.execute("start n=node(*), m = node(*) where id(n) <> 0 and id(m) <> 0 and n.uid = m.uid return n.id, m.id");
+        //System.out.println(result.toString());
+        calculateMetrics();
+
     }
 }
