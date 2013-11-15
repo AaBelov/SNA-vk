@@ -17,6 +17,7 @@ import org.jdom2.JDOMException;
 import org.jdom2.input.SAXBuilder;
 import org.neo4j.graphalgo.impl.centrality.BetweennessCentrality;
 import org.neo4j.graphalgo.impl.centrality.ClosenessCentrality;
+import org.neo4j.graphalgo.impl.centrality.CostDivider;
 import org.neo4j.graphalgo.impl.centrality.EigenvectorCentralityPower;
 import org.neo4j.graphalgo.impl.centrality.ParallellCentralityCalculation;
 import org.neo4j.graphalgo.impl.shortestpath.*;
@@ -32,7 +33,7 @@ public class SNA {
 
     public static final String BASE_URI = "https://api.vk.com/method/";
     private static final int MAX_LEVEL = 1;
-    private static final String DB_PATH = "GroupDB";
+    private static final String DB_PATH = "DB";
     private static final String FRIEND_LIST_KEY = "friend_list";
     private static final GraphDatabaseService graphDb = new GraphDatabaseFactory().newEmbeddedDatabase(DB_PATH);
     private static Index<Node> nodeIndex;
@@ -105,6 +106,7 @@ public class SNA {
         request = request.append(",games");
         request = request.append(",about");
         request = request.append(",personal");
+        request = request.append(",counters");
         String response = requestGET(request.toString());
         return response;
     }
@@ -143,6 +145,7 @@ public class SNA {
             personData.put("books", getOneField("books", user));
             personData.put("games", getOneField("games", user));
             personData.put("about", getOneField("about", user));
+            personData.put("counters", getOneField("counters", user));
         } catch (JDOMException ex) {
             Logger.getLogger(SNA.class.getName()).log(Level.SEVERE, null, ex);
         } catch (IOException ex) {
@@ -261,14 +264,25 @@ public class SNA {
         BetweennessCentrality betweenness;
         betweenness = new BetweennessCentrality(BFS, nodes);
         betweenness.calculate();
+        
+        ClosenessCentrality<Double> closeness;
+        closeness = new ClosenessCentrality(BFS, new IntegerAdder(), 0.0, nodes, new CostDivider<Double>()
+            {
+                public Double divideByCost( Double d, Double c )
+                {
+                    return d / c;
+                }
 
+                public Double divideCost( Double c, Double d )
+                {
+                    return c / d;
+                }
+            });
+        closeness.calculate();
+        
         EigenvectorCentralityPower eigenvector;
         eigenvector = new EigenvectorCentralityPower(Direction.BOTH, null, nodes, null, 0.01);
         eigenvector.calculate();
-        
-        ClosenessCentrality closeness;
-        closeness = new ClosenessCentrality(BFS, null, null, nodes, null);
-        closeness.calculate();
         
         /*ParallellCentralityCalculation shortestPathCalculations = new ParallellCentralityCalculation(BFS, nodes);
         shortestPathCalculations.addCalculation(betweenness);
@@ -316,13 +330,12 @@ public class SNA {
     public static void main(String[] args) {
         registerShutdownHook(graphDb);
         nodeIndex = graphDb.index().forNodes("uids");
-        //dowloadData("86030925");
-        downloadGroupMembers("29899098");
-        setAllRelations();
+        downloadData("86030925");
+        //downloadGroupMembers("29899098");
+        //setAllRelations();
+        //calculateMetrics();
         //ExecutionEngine engine = new ExecutionEngine(graphDb);
         //ExecutionResult result = engine.execute("start n=node(*), m = node(*) where id(n) <> 0 and id(m) <> 0 and n.uid = m.uid return n.id, m.id");
         //System.out.println(result.toString());
-        calculateMetrics();
-
     }
 }
